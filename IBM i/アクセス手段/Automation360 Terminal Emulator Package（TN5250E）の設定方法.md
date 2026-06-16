@@ -388,6 +388,72 @@ Terminal Emulator Package を使った 5250 接続（Telnet）では通常 JDBC 
 
 ---
 
+## 7. 実装パターン例
+
+### ログオン → 業務画面操作 → ログオフ
+
+```
+[1]  Connect
+       Session name: ibmi_session / Terminal type: TN5250E
+       Host: 192.168.1.10 / Port: 23
+       Session scope: Local session
+
+[2]  Wait（Wait till screen contains text）
+       Text: "サインオン"（ログオン画面の固定文言）
+       Timeout: 30,000 ms
+
+[3]  Get all fields ← 初回調査時のみ。ユーザー ID / パスワードの index を確認する
+
+[4]  Set field（ユーザー ID 入力）
+       By index: 0（最初の入力フィールド）
+       Value: $userId（変数または Credential Vault）
+
+[5]  Set field（パスワード入力 + Enter 送信）
+       By index: 1
+       Value: $password（Credential Vault 推奨）
+       Send enter key after setting field: ON
+
+[6]  Wait（Wait till screen contains text）
+       Text: "メインメニュー"（ログオン後のメニュー画面固定文言）
+       Timeout: 15,000 ms
+
+[7]  Send text（メニュー番号入力）
+       Text: "1"
+       Send key after text: ENTER
+
+[8]  Wait（Wait till screen contains text）
+       Text: "業務画面タイトル"
+       Timeout: 10,000 ms
+
+[9]  --- 業務操作（Get field / Set field / Send key 等） ---
+
+[10] Send key（F3 でサインオフ）
+       Key: F3
+
+[11] Wait（Wait till screen contains text）
+       Text: "サインオン"（ログオン画面に戻ったことを確認）
+       Timeout: 10,000 ms
+
+[12] Disconnect
+       Session name: ibmi_session
+```
+
+### エラーハンドリングの基本パターン
+
+```
+[操作前]
+  Get text（Last line） → $lastLine に格納
+  If $lastLine contains "エラー"
+    → Send key: RESET
+    → Wait（Wait till cursor moves to position: 待機フィールド行・列）
+
+[例外時の後処理]
+  Try/Catch の Catch ブロックに Disconnect を置き、
+  異常終了時も必ず接続を切断する
+```
+
+---
+
 ## 参考 URL
 
 | ページ | URL |
@@ -400,9 +466,13 @@ Terminal Emulator Package を使った 5250 接続（Telnet）では通常 JDBC 
 | Get field アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/terminal-emulator-package-get-field-action.html |
 | Get all fields アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/terminal-emulator-package-get-all-fields-action.html |
 | Search field アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/terminal-emulator-package-search-field-action.html |
+| Set field アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/cloud-using-set-field-action.html |
 | Set cursor position アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/terminal-emulator-package-set-cursor-position-action.html |
+| Set key mappings アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/using-set-key-mappings.html |
 | Wait アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/cloud-terminal-wait-action.html |
 | Disconnect アクション | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/terminal-emulator-package-disconnect-action.html |
 | Terminal Emulator Package 更新履歴 | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/terminal-emulator-package-releases.html |
 | セッション共有（親 Bot / 子 Bot） | https://docs.automationanywhere.com/bundle/enterprise-v2019/page/enterprise-cloud/topics/aae-client/bot-creator/commands/sharing-sessions-across-bots.html |
 | Automation Anywhere Community: ボット効率改善（メインフレーム） | https://community.automationanywhere.com/developers-forum-36/improving-bot-efficiency-for-mainframe-applications-90046 |
+| RFC 1205: 5250 Telnet Interface | https://www.rfc-editor.org/rfc/rfc1205 |
+| RFC 2877: 5250 Telnet Enhancements | https://www.rfc-editor.org/rfc/rfc2877 |
