@@ -17,6 +17,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - README.md・CLAUDE.md などの標準ファイルを除き、ファイル名・ディレクトリ名は日本語を使用する
 - コードサンプルは記事と同じディレクトリに置き、ファイル名で言語を区別する（例: `ブラウザ操作_CSHARP.cs`）
 
+## Git 規約
+
+- ファイルに変更を加えたら、都度 `git commit` する
+
+## 言語規約
+
+- **基本想定言語**: C# および VBA
+- コードサンプルを作成する際は、特に指定がない限り C# または VBA を使用する
+
 ## ディレクトリ構成パターン
 
 大テーマ → 中テーマ（任意） → 小テーマ（任意） → 記事・コードサンプル
