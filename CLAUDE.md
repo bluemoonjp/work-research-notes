@@ -17,6 +17,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - README.md・CLAUDE.md などの標準ファイルを除き、ファイル名・ディレクトリ名は日本語を使用する
 - コードサンプルは記事と同じディレクトリに置き、ファイル名で言語を区別する（例: `ブラウザ操作_CSHARP.cs`）
 
+## 調査規約
+
+- **調査**: Codex と Claude サブエージェントで並行して実施する
+- **レビュー**: Codex と Claude サブエージェントがそれぞれ独立してレビューを行う
+- **再調査**: レビュー結果に基づき必要と判断した場合は再調査を行う
+
 ## Git 規約
 
 - ファイルに変更を加えたら、都度 `git commit` する
