@@ -87,11 +87,17 @@ https://{サブドメイン}.cybozu.com/oauth2/authorization
 
 ```bash
 curl -X POST "https://{サブドメイン}.cybozu.com/oauth2/token" \
-  -H "Authorization: Basic $(echo -n '{クライアントID}:{クライアントシークレット}' | base64)" \
+  -H "Authorization: Basic {Base64エンコードした「クライアントID:クライアントシークレット」}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "redirect_uri={リダイレクト URI}" \
   -d "code={認可コード}"
+```
+
+**Base64 エンコードの例（PowerShell）:**
+
+```powershell
+[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("{クライアントID}:{クライアントシークレット}"))
 ```
 
 **レスポンス例:**
@@ -122,7 +128,7 @@ curl -X GET "https://{サブドメイン}.cybozu.com/k/v1/records.json?app=1" \
 
 ```bash
 curl -X POST "https://{サブドメイン}.cybozu.com/oauth2/token" \
-  -H "Authorization: Basic $(echo -n '{クライアントID}:{クライアントシークレット}' | base64)" \
+  -H "Authorization: Basic {Base64エンコードした「クライアントID:クライアントシークレット」}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=refresh_token" \
   -d "refresh_token={リフレッシュトークン}"
