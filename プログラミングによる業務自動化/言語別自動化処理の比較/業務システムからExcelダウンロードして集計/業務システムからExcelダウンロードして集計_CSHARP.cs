@@ -74,6 +74,27 @@ class BusinessSystemDownloader
     private const string UserName     = "user@example.com";
     private const string Password     = "password";
 
+    // 先月の期間（開始日・終了日）を計算して返す
+    //
+    // タプル (DateTime Start, DateTime End):
+    //   C# では複数の値をひとつの戻り値にまとめられる。
+    //   out パラメータより書き方がシンプルで、受け取り側も読みやすい。
+    private static (DateTime Start, DateTime End) GetLastMonthRange()
+    {
+        var today = DateTime.Now;
+
+        // 今月1日を起点にして先月の範囲を求める。
+        // new DateTime(year, month, day) で任意の日付を作れる。
+        var firstOfThisMonth = new DateTime(today.Year, today.Month, 1);
+
+        // AddMonths(-1): 月を1つ戻す。月末の計算を自分でしなくてよい。
+        // AddDays(-1):   今月1日の前日 = 先月末。うるう年や月ごとの日数差を意識しなくてよい。
+        var start = firstOfThisMonth.AddMonths(-1); // 先月1日
+        var end   = firstOfThisMonth.AddDays(-1);   // 先月末
+
+        return (start, end);
+    }
+
     // async Task<string> = 非同期メソッド。完了後に string を返す。
     // Playwright は「await」を使う非同期処理が前提になっている。
     // await = その処理が完了するまで次の行に進まずに待つ、という意味。
@@ -106,6 +127,17 @@ class BusinessSystemDownloader
         // WaitForURLAsync: URL がパターンに一致するまで待機する
         // ポーリング（一定間隔で確認）ではなくブラウザのイベントを監視するため無駄がない
         await page.WaitForURLAsync(DashboardUrl);
+
+        // ── 日付範囲の設定 ──
+        // 先月の期間を計算し、ToString で文字列に変換してフォームに入力する。
+        // "yyyy/MM/dd" は書式文字列: yyyy=年4桁, MM=月2桁, dd=日2桁
+        // 例: 2024年5月1日 → "2024/05/01"（書式はシステムに合わせて変更すること）
+        var (startDate, endDate) = GetLastMonthRange();
+        await page.FillAsync("#start-date", startDate.ToString("yyyy/MM/dd"));
+        await page.FillAsync("#end-date",   endDate.ToString("yyyy/MM/dd"));
+        await page.ClickAsync("#search-btn");
+        // WaitForSelectorAsync: 指定した要素が DOM に現れるまで待機する
+        await page.WaitForSelectorAsync(".result-table");
 
         // ── ダウンロード ──
         // RunAndWaitForDownloadAsync: クリックとダウンロード完了の待機を同時に行う
