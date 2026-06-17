@@ -75,6 +75,48 @@ class SalesSummary
 }
 
 // ─────────────────────────────────────────────────────────────
+// エントリポイント: ブックを 1 度だけ開いて 3 つの処理を順番に実行する
+// ─────────────────────────────────────────────────────────────
+class Program
+{
+    static void Main(string[] args)
+    {
+        // AppContext.BaseDirectory: 実行ファイルと同じディレクトリのパスを取得する
+        var filePath = Path.Combine(AppContext.BaseDirectory, "データ.xlsx");
+
+        Console.WriteLine("=== 1〜3まとめ ===");
+
+        // XLWorkbook(filePath): 既存の Excel ファイルを開く
+        // using: ブロックを抜けるときに自動で Dispose（ファイルを閉じる）する
+        using var workbook = new XLWorkbook(filePath);
+
+        // 商品マスタは 3 プログラム共通で使うので最初に 1 回だけ読み込む
+        Console.WriteLine("\n[1/5] 商品マスタを読み込み中...");
+        var masters = MasterSheetReader.Read(workbook);
+
+        // 注文はプログラム 2 だけで使う
+        Console.WriteLine("\n[2/5] 注文を読み込み中...");
+        var orders = OrderSheetReader.Read(workbook);
+
+        // プログラム 1: 今年発売のハイグレードモデルを抽出してシートに書き出す
+        Console.WriteLine("\n[3/5] プログラム 1 実行中...");
+        Prog1Processor.Run(workbook, masters);
+
+        // プログラム 2: Join してグループ化集計してシートに書き出す
+        Console.WriteLine("\n[4/5] プログラム 2 実行中...");
+        Prog2Processor.Run(workbook, masters, orders);
+
+        // プログラム 3: OR 条件でイレギュラー商品を抽出してシートに書き出す
+        Console.WriteLine("\n[5/5] プログラム 3 実行中...");
+        Prog3Processor.Run(workbook, masters);
+
+        // workbook.Save(): 開いたファイルを 1 度だけ上書き保存する
+        workbook.Save();
+        Console.WriteLine("\n完了しました。");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Excel 読み込み: 商品マスタシート（プログラム 1・2・3 共通）
 // ─────────────────────────────────────────────────────────────
 static class MasterSheetReader
@@ -190,7 +232,6 @@ static class Prog1Processor
         Console.WriteLine($"  [Prog1] シート「{SheetName}」に書き出し完了");
     }
 
-    // ヘッダ行の書き込み（このクラス内で使う共通処理）
     private static void WriteHeader(IXLWorksheet sheet, string[] headers, XLColor bgColor)
     {
         for (int col = 1; col <= headers.Length; col++)
@@ -450,47 +491,5 @@ static class Prog3Processor
             cell.Style.Font.FontColor       = XLColor.White;
             cell.Style.Font.Bold            = true;
         }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// エントリポイント: ブックを 1 度だけ開いて 3 つの処理を順番に実行する
-// ─────────────────────────────────────────────────────────────
-class Program
-{
-    static void Main(string[] args)
-    {
-        // AppContext.BaseDirectory: 実行ファイルと同じディレクトリのパスを取得する
-        var filePath = Path.Combine(AppContext.BaseDirectory, "データ.xlsx");
-
-        Console.WriteLine("=== 1〜3まとめ ===");
-
-        // XLWorkbook(filePath): 既存の Excel ファイルを開く
-        // using: ブロックを抜けるときに自動で Dispose（ファイルを閉じる）する
-        using var workbook = new XLWorkbook(filePath);
-
-        // 商品マスタは 3 プログラム共通で使うので最初に 1 回だけ読み込む
-        Console.WriteLine("\n[1/5] 商品マスタを読み込み中...");
-        var masters = MasterSheetReader.Read(workbook);
-
-        // 注文はプログラム 2 だけで使う
-        Console.WriteLine("\n[2/5] 注文を読み込み中...");
-        var orders = OrderSheetReader.Read(workbook);
-
-        // プログラム 1: 今年発売のハイグレードモデルを抽出してシートに書き出す
-        Console.WriteLine("\n[3/5] プログラム 1 実行中...");
-        Prog1Processor.Run(workbook, masters);
-
-        // プログラム 2: Join してグループ化集計してシートに書き出す
-        Console.WriteLine("\n[4/5] プログラム 2 実行中...");
-        Prog2Processor.Run(workbook, masters, orders);
-
-        // プログラム 3: OR 条件でイレギュラー商品を抽出してシートに書き出す
-        Console.WriteLine("\n[5/5] プログラム 3 実行中...");
-        Prog3Processor.Run(workbook, masters);
-
-        // workbook.Save(): 開いたファイルを 1 度だけ上書き保存する
-        workbook.Save();
-        Console.WriteLine("\n完了しました。");
     }
 }
