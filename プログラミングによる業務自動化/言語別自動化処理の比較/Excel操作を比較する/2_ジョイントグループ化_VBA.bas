@@ -10,222 +10,234 @@ Option Explicit
 '==============================================================================
 Sub 実行_ジョイントグループ化()
 
-    ' --- 変数宣言（VBAのDimは関数スコープ。ループ内に書いても有効範囲は変わらないため先頭にまとめる） ---
-    Dim wsマスタ    As Worksheet
-    Dim ws注文      As Worksheet
-    Dim ws出力      As Worksheet
-    Dim dicマスタ   As Object   ' key=商品コード, value=マスタ情報配列
-    Dim dic集計     As Object   ' key=yyyy/mm_商品コード, value=集計情報配列
-    Dim LastRow     As Long
-    Dim i           As Long
-    Dim j           As Long
-    Dim p           As Long
-    Dim q           As Long
-    Dim k           As Long
+    Dim dicマスタ As Object
+    Dim dic集計   As Object
+    Dim データ    As Variant
+    Dim 件数      As Long
+    Dim ws出力    As Worksheet
 
-    ' Step1で使用
-    Dim 商品コード   As String
-    Dim マスタ情報(6) As Variant
+    Set dicマスタ = マスタをDicに読み込む(ThisWorkbook.Worksheets("商品マスタ"))
+    Set dic集計   = 注文を集計してDicに格納する(ThisWorkbook.Worksheets("注文"), dicマスタ)
 
-    ' Step2で使用
-    Dim 注文コード  As String
-    Dim 注文日      As Date
-    Dim 数量        As Long
-    Dim 販売年月    As String
-    Dim 集計キー    As String
-    Dim m()         As Variant
-    Dim 単品原価    As Double
-    Dim 単品売価    As Double
-    Dim 既存()      As Variant
-    Dim 新規(7)     As Variant
-
-    ' Step3で使用
-    Dim キー一覧    As Variant
-    Dim 件数        As Long
-    Dim ソートデータ() As Variant
-    Dim エントリ()  As Variant
-    Dim 売上金額    As Double
-    Dim 原価合計    As Double
-    Dim 利益額      As Double
-    Dim 利益率      As Double
-
-    ' Step4で使用
-    Dim 入替        As Boolean
-    Dim 一時行(9)   As Variant
-    Dim 年月A       As String
-    Dim 年月B       As String
-
-    ' Step5で使用
-    Dim 出力行      As Long
-
-    ' --- 入力シートの参照 ---
-    Set wsマスタ = ThisWorkbook.Worksheets("商品マスタ")
-    Set ws注文   = ThisWorkbook.Worksheets("注文")
-
-    ' ============================================================
-    ' Step1: 商品マスタをDictionaryに読み込む（key=商品コード）
-    ' ============================================================
-    Set dicマスタ = CreateObject("Scripting.Dictionary")
-    dicマスタ.CompareMode = 1  ' テキスト比較（大文字小文字を区別しない）
-
-    LastRow = wsマスタ.Cells(wsマスタ.Rows.Count, 1).End(xlUp).Row
-
-    For i = 2 To LastRow
-        商品コード = CStr(wsマスタ.Cells(i, 1).Value)
-
-        If 商品コード <> "" Then
-            ' 配列: (0)商品名 (1)型番 (2)発売日 (3)仕入元 (4)調達区分 (5)単品原価 (6)単品売価
-            マスタ情報(0) = wsマスタ.Cells(i, 2).Value  ' 商品名
-            マスタ情報(1) = wsマスタ.Cells(i, 3).Value  ' 型番
-            マスタ情報(2) = wsマスタ.Cells(i, 4).Value  ' 発売日
-            マスタ情報(3) = wsマスタ.Cells(i, 5).Value  ' 仕入元
-            マスタ情報(4) = wsマスタ.Cells(i, 6).Value  ' 調達区分
-            マスタ情報(5) = CDbl(wsマスタ.Cells(i, 7).Value)  ' 単品原価
-            マスタ情報(6) = CDbl(wsマスタ.Cells(i, 8).Value)  ' 単品売価
-
-            dicマスタ(商品コード) = マスタ情報
-        End If
-    Next i
-
-    ' ============================================================
-    ' Step2: 注文を1行ずつ読み込み、商品マスタとジョインして集計
-    ' ============================================================
-    Set dic集計 = CreateObject("Scripting.Dictionary")
-    dic集計.CompareMode = 1
-
-    LastRow = ws注文.Cells(ws注文.Rows.Count, 1).End(xlUp).Row
-
-    For i = 2 To LastRow
-        注文コード = CStr(ws注文.Cells(i, 3).Value)  ' 商品コード列（C列）
-
-        ' 商品マスタに存在しない場合はスキップ
-        If Not dicマスタ.Exists(注文コード) Then GoTo 次の注文
-
-        ' 注文日から販売年月（yyyy/mm）を生成
-        If IsDate(ws注文.Cells(i, 2).Value) Then
-            注文日 = CDate(ws注文.Cells(i, 2).Value)
-        Else
-            GoTo 次の注文
-        End If
-        販売年月 = Format(注文日, "yyyy/mm")
-
-        数量 = CLng(ws注文.Cells(i, 4).Value)
-
-        ' 集計用のキーを「yyyy/mm_商品コード」で生成
-        集計キー = 販売年月 & "_" & 注文コード
-
-        ' マスタ情報を取得
-        m = dicマスタ(注文コード)
-        単品原価 = CDbl(m(5))
-        単品売価 = CDbl(m(6))
-
-        ' Dictionaryに既存エントリがあれば累積、なければ新規作成
-        ' 配列: (0)販売年月 (1)商品コード (2)商品名 (3)単品原価 (4)単品売価
-        '        (5)売上個数 (6)売上金額  (7)原価合計
-        If dic集計.Exists(集計キー) Then
-            既存 = dic集計(集計キー)
-            既存(5) = 既存(5) + 数量               ' 売上個数
-            既存(6) = 既存(6) + (数量 * 単品売価)   ' 売上金額
-            既存(7) = 既存(7) + (数量 * 単品原価)   ' 原価合計
-            dic集計(集計キー) = 既存
-        Else
-            新規(0) = 販売年月
-            新規(1) = 注文コード
-            新規(2) = m(0)                          ' 商品名
-            新規(3) = 単品原価
-            新規(4) = 単品売価
-            新規(5) = 数量                           ' 売上個数
-            新規(6) = 数量 * 単品売価                ' 売上金額
-            新規(7) = 数量 * 単品原価                ' 原価合計
-            dic集計(集計キー) = 新規
-        End If
-
-次の注文:
-    Next i
-
-    ' ============================================================
-    ' Step3: Dictionaryを2次元配列に変換してソート準備
-    ' ============================================================
-    キー一覧 = dic集計.Keys
     件数 = dic集計.Count
-
     If 件数 = 0 Then
         MsgBox "集計対象のデータがありません。", vbExclamation
         Exit Sub
     End If
 
-    ' ソート用2次元配列
-    ' 列: 0=販売年月 1=商品コード 2=商品名 3=単品原価 4=単品売価
-    '      5=売上個数 6=売上金額 7=原価合計 8=利益額 9=利益率
-    ReDim ソートデータ(件数 - 1, 9)
+    データ = DicをDataに変換する(dic集計, 件数)  ' 利益額・利益率も算出
+    バブルソート データ, 件数                      ' 販売年月昇順・利益額降順
+
+    Set ws出力 = 出力シートを準備する("販売集計")
+    集計ヘッダーを書き込む ws出力
+    集計データを書き込む ws出力, データ, 件数
+    ws出力.Columns("A:J").AutoFit
+
+    MsgBox "プログラム2 完了: 「販売集計」シートに " & 件数 & " 件出力しました。", vbInformation
+
+End Sub
+
+'--------------------------------------------------------------
+' 既存シートを削除して新規作成し、Worksheetオブジェクトを返す
+'--------------------------------------------------------------
+Private Function 出力シートを準備する(シート名 As String) As Worksheet
+
+    Dim ws As Worksheet
+
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    ThisWorkbook.Worksheets(シート名).Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+
+    Set ws = ThisWorkbook.Worksheets.Add
+    ws.Name = シート名
+    Set 出力シートを準備する = ws
+
+End Function
+
+'--------------------------------------------------------------
+' 商品マスタを Dictionary に読み込んで返す
+' key=商品コード, value=Array(0..6)
+'   (0)商品名 (1)型番 (2)発売日 (3)仕入元 (4)調達区分 (5)単品原価 (6)単品売価
+'--------------------------------------------------------------
+Private Function マスタをDicに読み込む(ws As Worksheet) As Object
+
+    Dim dic     As Object
+    Dim LastRow As Long
+    Dim i       As Long
+    Dim コード  As String
+    Dim 情報(6) As Variant
+
+    Set dic = CreateObject("Scripting.Dictionary")
+    dic.CompareMode = 1
+    LastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    For i = 2 To LastRow
+        コード = CStr(ws.Cells(i, 1).Value)
+        If コード = "" Then GoTo 次のマスタ行
+
+        情報(0) = ws.Cells(i, 2).Value          ' 商品名
+        情報(1) = ws.Cells(i, 3).Value          ' 型番
+        情報(2) = ws.Cells(i, 4).Value          ' 発売日
+        情報(3) = ws.Cells(i, 5).Value          ' 仕入元
+        情報(4) = ws.Cells(i, 6).Value          ' 調達区分
+        情報(5) = CDbl(ws.Cells(i, 7).Value)    ' 単品原価
+        情報(6) = CDbl(ws.Cells(i, 8).Value)    ' 単品売価
+        dic(コード) = 情報
+次のマスタ行:
+    Next i
+
+    Set マスタをDicに読み込む = dic
+
+End Function
+
+'--------------------------------------------------------------
+' 注文を1行ずつ読んでジョイン・集計し Dictionary に格納して返す
+' key=販売年月_商品コード, value=Array(0..7)
+'   (0)販売年月 (1)商品コード (2)商品名 (3)単品原価 (4)単品売価
+'   (5)売上個数 (6)売上金額  (7)原価合計
+'--------------------------------------------------------------
+Private Function 注文を集計してDicに格納する( _
+    ws As Worksheet, dicマスタ As Object) As Object
+
+    Dim dic      As Object
+    Dim LastRow  As Long
+    Dim i        As Long
+    Dim コード   As String
+    Dim 注文日   As Date
+    Dim 販売年月 As String
+    Dim 集計キー As String
+    Dim 数量     As Long
+    Dim m        As Variant
+    Dim 原価     As Double
+    Dim 売価     As Double
+    Dim 既存     As Variant
+    Dim 新規(7)  As Variant
+
+    Set dic = CreateObject("Scripting.Dictionary")
+    dic.CompareMode = 1
+    LastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    For i = 2 To LastRow
+        コード = CStr(ws.Cells(i, 3).Value)
+        If Not dicマスタ.Exists(コード) Then GoTo 次の注文行
+        If Not IsDate(ws.Cells(i, 2).Value) Then GoTo 次の注文行
+
+        注文日   = CDate(ws.Cells(i, 2).Value)
+        販売年月 = Format(注文日, "yyyy/mm")
+        数量     = CLng(ws.Cells(i, 4).Value)
+        集計キー = 販売年月 & "_" & コード
+
+        m    = dicマスタ(コード)
+        原価 = CDbl(m(5))
+        売価 = CDbl(m(6))
+
+        If dic.Exists(集計キー) Then
+            ' 既存エントリに数量・金額を加算する
+            ' ※ VBAのDictionaryはValueを直接変更できないため、いったん取り出して戻す
+            既存    = dic(集計キー)
+            既存(5) = 既存(5) + 数量
+            既存(6) = 既存(6) + 数量 * 売価
+            既存(7) = 既存(7) + 数量 * 原価
+            dic(集計キー) = 既存
+        Else
+            新規(0) = 販売年月 : 新規(1) = コード
+            新規(2) = m(0)            ' 商品名
+            新規(3) = 原価            ' 単品原価
+            新規(4) = 売価            ' 単品売価
+            新規(5) = 数量            ' 売上個数
+            新規(6) = 数量 * 売価     ' 売上金額
+            新規(7) = 数量 * 原価     ' 原価合計
+            dic(集計キー) = 新規
+        End If
+次の注文行:
+    Next i
+
+    Set 注文を集計してDicに格納する = dic
+
+End Function
+
+'--------------------------------------------------------------
+' Dictionary を2次元配列に変換して返す（利益額・利益率も算出する）
+' 列: (0)販売年月 (1)商品コード (2)商品名 (3)単品原価 (4)単品売価
+'     (5)売上個数 (6)売上金額  (7)原価合計 (8)利益額  (9)利益率
+'--------------------------------------------------------------
+Private Function DicをDataに変換する(dic As Object, 件数 As Long) As Variant
+
+    Dim data()   As Variant
+    Dim キー一覧 As Variant
+    Dim エントリ As Variant
+    Dim j        As Long
+    Dim 売上金額 As Double
+    Dim 原価合計 As Double
+    Dim 利益額   As Double
+
+    ReDim data(件数 - 1, 9)
+    キー一覧 = dic.Keys
 
     For j = 0 To 件数 - 1
-        エントリ = dic集計(キー一覧(j))
-
+        エントリ = dic(キー一覧(j))
         売上金額 = CDbl(エントリ(6))
         原価合計 = CDbl(エントリ(7))
         利益額   = 売上金額 - 原価合計
-        If 売上金額 <> 0 Then
-            利益率 = 利益額 / 売上金額
-        Else
-            利益率 = 0
-        End If
 
-        ソートデータ(j, 0) = エントリ(0)  ' 販売年月
-        ソートデータ(j, 1) = エントリ(1)  ' 商品コード
-        ソートデータ(j, 2) = エントリ(2)  ' 商品名
-        ソートデータ(j, 3) = エントリ(3)  ' 単品原価
-        ソートデータ(j, 4) = エントリ(4)  ' 単品売価
-        ソートデータ(j, 5) = エントリ(5)  ' 売上個数
-        ソートデータ(j, 6) = 売上金額      ' 売上金額
-        ソートデータ(j, 7) = 原価合計      ' 原価合計
-        ソートデータ(j, 8) = 利益額        ' 利益額
-        ソートデータ(j, 9) = 利益率        ' 利益率
+        data(j, 0) = エントリ(0)  ' 販売年月
+        data(j, 1) = エントリ(1)  ' 商品コード
+        data(j, 2) = エントリ(2)  ' 商品名
+        data(j, 3) = エントリ(3)  ' 単品原価
+        data(j, 4) = エントリ(4)  ' 単品売価
+        data(j, 5) = エントリ(5)  ' 売上個数
+        data(j, 6) = 売上金額
+        data(j, 7) = 原価合計
+        data(j, 8) = 利益額
+        data(j, 9) = IIf(売上金額 <> 0, 利益額 / 売上金額, 0)  ' 利益率
     Next j
 
-    ' ============================================================
-    ' Step4: バブルソート（販売年月 昇順 → 利益額 降順）
-    ' ============================================================
+    DicをDataに変換する = data
+
+End Function
+
+'--------------------------------------------------------------
+' バブルソート: 販売年月昇順 → 同月内は利益額降順
+' ByRef により呼び出し元の配列を直接書き換える
+'--------------------------------------------------------------
+Private Sub バブルソート(ByRef data As Variant, 件数 As Long)
+
+    Dim p         As Long
+    Dim q         As Long
+    Dim k         As Long
+    Dim 入替      As Boolean
+    Dim 一時行(9) As Variant
+
     For p = 0 To 件数 - 2
         For q = 0 To 件数 - 2 - p
             入替 = False
-
-            年月A = CStr(ソートデータ(q, 0))
-            年月B = CStr(ソートデータ(q + 1, 0))
-
-            ' 販売年月が同じ場合は利益額の降順（大きい方が前）
-            If 年月A > 年月B Then
+            If CStr(data(q, 0)) > CStr(data(q + 1, 0)) Then
                 入替 = True
-            ElseIf 年月A = 年月B Then
-                If CDbl(ソートデータ(q, 8)) < CDbl(ソートデータ(q + 1, 8)) Then
-                    入替 = True
-                End If
+            ElseIf CStr(data(q, 0)) = CStr(data(q + 1, 0)) Then
+                ' 同じ販売年月なら利益額の降順（大きい方を前に）
+                If CDbl(data(q, 8)) < CDbl(data(q + 1, 8)) Then 入替 = True
             End If
 
             If 入替 Then
                 For k = 0 To 9
-                    一時行(k) = ソートデータ(q, k)
-                    ソートデータ(q, k) = ソートデータ(q + 1, k)
-                    ソートデータ(q + 1, k) = 一時行(k)
+                    一時行(k)        = data(q, k)
+                    data(q, k)       = data(q + 1, k)
+                    data(q + 1, k)   = 一時行(k)
                 Next k
             End If
         Next q
     Next p
 
-    ' ============================================================
-    ' Step5: 出力シートの準備と書き込み
-    ' ============================================================
-    Application.DisplayAlerts = False
-    On Error Resume Next
-    ThisWorkbook.Worksheets("販売集計").Delete
-    On Error GoTo 0
-    Application.DisplayAlerts = True
+End Sub
 
-    Set ws出力 = ThisWorkbook.Worksheets.Add
-    ws出力.Name = "販売集計"
+'--------------------------------------------------------------
+' 集計シートのヘッダー行を書き込む
+'--------------------------------------------------------------
+Private Sub 集計ヘッダーを書き込む(ws As Worksheet)
 
-    ' ヘッダー行の書き込み
-    With ws出力
+    With ws
         .Cells(1, 1).Value  = "販売年月"
         .Cells(1, 2).Value  = "商品コード"
         .Cells(1, 3).Value  = "商品名"
@@ -236,33 +248,32 @@ Sub 実行_ジョイントグループ化()
         .Cells(1, 8).Value  = "原価"
         .Cells(1, 9).Value  = "利益額"
         .Cells(1, 10).Value = "利益率"
-
-        ' ヘッダーを太字に
-        .Rows(1).Font.Bold = True
+        .Rows(1).Font.Bold  = True
     End With
 
-    ' データ行の書き込み
+End Sub
+
+'--------------------------------------------------------------
+' ソート済みの集計データを出力シートに書き込む
+'--------------------------------------------------------------
+Private Sub 集計データを書き込む(ws As Worksheet, data As Variant, 件数 As Long)
+
+    Dim i      As Long
+    Dim 出力行 As Long
+
     For i = 0 To 件数 - 1
         出力行 = i + 2
-
-        ws出力.Cells(出力行, 1).Value  = ソートデータ(i, 0)  ' 販売年月
-        ws出力.Cells(出力行, 2).Value  = ソートデータ(i, 1)  ' 商品コード
-        ws出力.Cells(出力行, 3).Value  = ソートデータ(i, 2)  ' 商品名
-        ws出力.Cells(出力行, 4).Value  = ソートデータ(i, 3)  ' 単品原価
-        ws出力.Cells(出力行, 5).Value  = ソートデータ(i, 4)  ' 単品売価
-        ws出力.Cells(出力行, 6).Value  = ソートデータ(i, 5)  ' 売上個数
-        ws出力.Cells(出力行, 7).Value  = ソートデータ(i, 6)  ' 売上金額
-        ws出力.Cells(出力行, 8).Value  = ソートデータ(i, 7)  ' 原価
-        ws出力.Cells(出力行, 9).Value  = ソートデータ(i, 8)  ' 利益額
-
-        ' 利益率はパーセント書式で2桁小数
-        ws出力.Cells(出力行, 10).Value        = ソートデータ(i, 9)
-        ws出力.Cells(出力行, 10).NumberFormat = "0.00%"
+        ws.Cells(出力行, 1).Value  = data(i, 0)  ' 販売年月
+        ws.Cells(出力行, 2).Value  = data(i, 1)  ' 商品コード
+        ws.Cells(出力行, 3).Value  = data(i, 2)  ' 商品名
+        ws.Cells(出力行, 4).Value  = data(i, 3)  ' 単品原価
+        ws.Cells(出力行, 5).Value  = data(i, 4)  ' 単品売価
+        ws.Cells(出力行, 6).Value  = data(i, 5)  ' 売上個数
+        ws.Cells(出力行, 7).Value  = data(i, 6)  ' 売上金額
+        ws.Cells(出力行, 8).Value  = data(i, 7)  ' 原価
+        ws.Cells(出力行, 9).Value  = data(i, 8)  ' 利益額
+        ws.Cells(出力行, 10).Value        = data(i, 9)  ' 利益率（小数: 0.35 = 35%）
+        ws.Cells(出力行, 10).NumberFormat = "0.00%"
     Next i
-
-    ' 列幅を自動調整
-    ws出力.Columns("A:J").AutoFit
-
-    MsgBox "プログラム2 完了: 「販売集計」シートに " & 件数 & " 件出力しました。", vbInformation
 
 End Sub
