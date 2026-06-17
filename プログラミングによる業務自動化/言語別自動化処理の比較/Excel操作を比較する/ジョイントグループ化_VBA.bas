@@ -10,6 +10,7 @@ Option Explicit
 '==============================================================================
 Sub 実行_ジョイントグループ化()
 
+    ' --- 変数宣言（VBAのDimは関数スコープ。ループ内に書いても有効範囲は変わらないため先頭にまとめる） ---
     Dim wsマスタ    As Worksheet
     Dim ws注文      As Worksheet
     Dim ws出力      As Worksheet
@@ -17,6 +18,45 @@ Sub 実行_ジョイントグループ化()
     Dim dic集計     As Object   ' key=yyyy/mm_商品コード, value=集計情報配列
     Dim LastRow     As Long
     Dim i           As Long
+    Dim j           As Long
+    Dim p           As Long
+    Dim q           As Long
+    Dim k           As Long
+
+    ' Step1で使用
+    Dim 商品コード   As String
+    Dim マスタ情報(6) As Variant
+
+    ' Step2で使用
+    Dim 注文コード  As String
+    Dim 注文日      As Date
+    Dim 数量        As Long
+    Dim 販売年月    As String
+    Dim 集計キー    As String
+    Dim m()         As Variant
+    Dim 単品原価    As Double
+    Dim 単品売価    As Double
+    Dim 既存()      As Variant
+    Dim 新規(7)     As Variant
+
+    ' Step3で使用
+    Dim キー一覧    As Variant
+    Dim 件数        As Long
+    Dim ソートデータ() As Variant
+    Dim エントリ()  As Variant
+    Dim 売上金額    As Double
+    Dim 原価合計    As Double
+    Dim 利益額      As Double
+    Dim 利益率      As Double
+
+    ' Step4で使用
+    Dim 入替        As Boolean
+    Dim 一時行(9)   As Variant
+    Dim 年月A       As String
+    Dim 年月B       As String
+
+    ' Step5で使用
+    Dim 出力行      As Long
 
     ' --- 入力シートの参照 ---
     Set wsマスタ = ThisWorkbook.Worksheets("商品マスタ")
@@ -31,12 +71,10 @@ Sub 実行_ジョイントグループ化()
     LastRow = wsマスタ.Cells(wsマスタ.Rows.Count, 1).End(xlUp).Row
 
     For i = 2 To LastRow
-        Dim 商品コード As String
         商品コード = CStr(wsマスタ.Cells(i, 1).Value)
 
         If 商品コード <> "" Then
             ' 配列: (0)商品名 (1)型番 (2)発売日 (3)仕入元 (4)調達区分 (5)単品原価 (6)単品売価
-            Dim マスタ情報(6) As Variant
             マスタ情報(0) = wsマスタ.Cells(i, 2).Value  ' 商品名
             マスタ情報(1) = wsマスタ.Cells(i, 3).Value  ' 型番
             マスタ情報(2) = wsマスタ.Cells(i, 4).Value  ' 発売日
@@ -58,12 +96,6 @@ Sub 実行_ジョイントグループ化()
     LastRow = ws注文.Cells(ws注文.Rows.Count, 1).End(xlUp).Row
 
     For i = 2 To LastRow
-        Dim 注文コード As String
-        Dim 注文日     As Date
-        Dim 数量       As Long
-        Dim 販売年月   As String
-        Dim 集計キー   As String
-
         注文コード = CStr(ws注文.Cells(i, 3).Value)  ' 商品コード列（C列）
 
         ' 商品マスタに存在しない場合はスキップ
@@ -83,10 +115,7 @@ Sub 実行_ジョイントグループ化()
         集計キー = 販売年月 & "_" & 注文コード
 
         ' マスタ情報を取得
-        Dim m() As Variant
         m = dicマスタ(注文コード)
-        Dim 単品原価 As Double
-        Dim 単品売価 As Double
         単品原価 = CDbl(m(5))
         単品売価 = CDbl(m(6))
 
@@ -94,14 +123,12 @@ Sub 実行_ジョイントグループ化()
         ' 配列: (0)販売年月 (1)商品コード (2)商品名 (3)単品原価 (4)単品売価
         '        (5)売上個数 (6)売上金額  (7)原価合計
         If dic集計.Exists(集計キー) Then
-            Dim 既存() As Variant
             既存 = dic集計(集計キー)
             既存(5) = 既存(5) + 数量               ' 売上個数
             既存(6) = 既存(6) + (数量 * 単品売価)   ' 売上金額
             既存(7) = 既存(7) + (数量 * 単品原価)   ' 原価合計
             dic集計(集計キー) = 既存
         Else
-            Dim 新規(7) As Variant
             新規(0) = 販売年月
             新規(1) = 注文コード
             新規(2) = m(0)                          ' 商品名
@@ -119,10 +146,7 @@ Sub 実行_ジョイントグループ化()
     ' ============================================================
     ' Step3: Dictionaryを2次元配列に変換してソート準備
     ' ============================================================
-    Dim キー一覧   As Variant
     キー一覧 = dic集計.Keys
-
-    Dim 件数 As Long
     件数 = dic集計.Count
 
     If 件数 = 0 Then
@@ -133,18 +157,10 @@ Sub 実行_ジョイントグループ化()
     ' ソート用2次元配列
     ' 列: 0=販売年月 1=商品コード 2=商品名 3=単品原価 4=単品売価
     '      5=売上個数 6=売上金額 7=原価合計 8=利益額 9=利益率
-    Dim ソートデータ() As Variant
     ReDim ソートデータ(件数 - 1, 9)
 
-    Dim j As Long
     For j = 0 To 件数 - 1
-        Dim エントリ() As Variant
         エントリ = dic集計(キー一覧(j))
-
-        Dim 売上金額 As Double
-        Dim 原価合計 As Double
-        Dim 利益額   As Double
-        Dim 利益率   As Double
 
         売上金額 = CDbl(エントリ(6))
         原価合計 = CDbl(エントリ(7))
@@ -170,16 +186,10 @@ Sub 実行_ジョイントグループ化()
     ' ============================================================
     ' Step4: バブルソート（販売年月 昇順 → 利益額 降順）
     ' ============================================================
-    Dim p As Long, q As Long
-    Dim 入替 As Boolean
-    Dim 一時行(9) As Variant
-
     For p = 0 To 件数 - 2
         For q = 0 To 件数 - 2 - p
             入替 = False
 
-            Dim 年月A As String
-            Dim 年月B As String
             年月A = CStr(ソートデータ(q, 0))
             年月B = CStr(ソートデータ(q + 1, 0))
 
@@ -193,7 +203,6 @@ Sub 実行_ジョイントグループ化()
             End If
 
             If 入替 Then
-                Dim k As Long
                 For k = 0 To 9
                     一時行(k) = ソートデータ(q, k)
                     ソートデータ(q, k) = ソートデータ(q + 1, k)
@@ -234,7 +243,6 @@ Sub 実行_ジョイントグループ化()
 
     ' データ行の書き込み
     For i = 0 To 件数 - 1
-        Dim 出力行 As Long
         出力行 = i + 2
 
         ws出力.Cells(出力行, 1).Value  = ソートデータ(i, 0)  ' 販売年月
@@ -248,7 +256,7 @@ Sub 実行_ジョイントグループ化()
         ws出力.Cells(出力行, 9).Value  = ソートデータ(i, 8)  ' 利益額
 
         ' 利益率はパーセント書式で2桁小数
-        ws出力.Cells(出力行, 10).Value  = ソートデータ(i, 9)
+        ws出力.Cells(出力行, 10).Value        = ソートデータ(i, 9)
         ws出力.Cells(出力行, 10).NumberFormat = "0.00%"
     Next i
 
