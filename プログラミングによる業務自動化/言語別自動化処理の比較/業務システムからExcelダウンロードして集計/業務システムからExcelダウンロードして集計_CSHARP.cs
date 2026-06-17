@@ -34,11 +34,11 @@ using Microsoft.Playwright;
 //
 // Excel から読み込んだ売上 1 行分を表す。読み込んだ後は変更しないので record が適切。
 record SalesRecord(
-    string OrderDate,    // 注文日
-    string ProductName,  // 商品名
-    string Category,     // カテゴリ
-    decimal UnitPrice,   // 単価
-    int Quantity         // 数量
+    string  OrderDate,    // 注文日
+    string  ProductName,  // 商品名
+    string  Category,     // カテゴリ
+    decimal UnitPrice,    // 単価
+    int     Quantity      // 数量
 )
 {
     // record の中にも計算プロパティを追加できる
@@ -56,10 +56,51 @@ record SalesRecord(
 // init: コンストラクタまたはオブジェクト初期化子でのみ設定できる（その後は変更不可）
 class CategorySummary
 {
-    public string Category { get; init; } = "";  // カテゴリ名
-    public decimal TotalAmount { get; init; }     // 合計金額
-    public int TotalQuantity { get; init; }       // 合計数量
-    public int OrderCount { get; init; }          // 注文件数
+    public string  Category      { get; init; } = "";  // カテゴリ名
+    public decimal TotalAmount   { get; init; }        // 合計金額
+    public int     TotalQuantity { get; init; }        // 合計数量
+    public int     OrderCount    { get; init; }        // 注文件数
+}
+
+// ─────────────────────────────────────────────────────────────
+// エントリポイント
+// ─────────────────────────────────────────────────────────────
+class Program
+{
+    // async Task Main = Playwright など非同期処理を使う場合のエントリポイントの書き方
+    // 通常の void Main と異なり、await を使った非同期処理を呼び出せる
+    static async Task Main(string[] args)
+    {
+        // 実行ファイルと同じフォルダをダウンロード先・出力先にする
+        var workDir    = AppContext.BaseDirectory;
+        var outputPath = Path.Combine(workDir, "集計結果.xlsx");
+
+        Console.WriteLine("=== 業務システムからExcelダウンロードして集計 ===");
+
+        // 1. ブラウザでログインしてダウンロード
+        Console.WriteLine("\n[1/4] ブラウザでログイン・ダウンロード中...");
+        var downloader         = new BusinessSystemDownloader();
+        var downloadedFilePath = await downloader.DownloadAsync(workDir);
+
+        // 2. ダウンロードした Excel を読み込む
+        Console.WriteLine("\n[2/4] Excel を読み込み中...");
+        var records = ExcelParser.Parse(downloadedFilePath);
+
+        // 3. LINQ でカテゴリ別に集計する
+        Console.WriteLine("\n[3/4] 集計中...");
+        var summary = SalesAggregator.Aggregate(records);
+
+        // 集計結果をコンソールにも出力する
+        Console.WriteLine("\nカテゴリ別集計結果:");
+        foreach (var s in summary)
+            Console.WriteLine($"  {s.Category,-15} 合計金額: {s.TotalAmount,10:N0}円  件数: {s.OrderCount}");
+
+        // 4. Excel に書き出す
+        Console.WriteLine("\n[4/4] Excel に書き出し中...");
+        ExcelWriter.Write(records, summary, outputPath);
+
+        Console.WriteLine("\n完了しました。");
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -100,10 +141,8 @@ class BusinessSystemDownloader
     // await = その処理が完了するまで次の行に進まずに待つ、という意味。
     public async Task<string> DownloadAsync(string saveDirectory)
     {
-        // Playwright の初期化（ブラウザを操作するための仕組みを準備する）
         using var playwright = await Playwright.CreateAsync();
 
-        // Chromium ブラウザを起動する
         // Headless = false にするとブラウザが画面に表示される（動作確認に便利）
         // Headless = true にするとバックグラウンドで動作する（本番運用向け）
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
@@ -114,41 +153,29 @@ class BusinessSystemDownloader
         var page = await browser.NewPageAsync();
 
         // ── ログイン ──
-        // GotoAsync: 指定した URL をブラウザで開く
         await page.GotoAsync(LoginUrl);
-
-        // FillAsync: CSS セレクタで要素を指定し、テキストを入力する
         await page.FillAsync("#username", UserName);
         await page.FillAsync("#password", Password);
-
-        // ClickAsync: 指定した要素をクリックする
         await page.ClickAsync("button[type=submit]");
-
         // WaitForURLAsync: URL がパターンに一致するまで待機する
-        // ポーリング（一定間隔で確認）ではなくブラウザのイベントを監視するため無駄がない
         await page.WaitForURLAsync(DashboardUrl);
 
         // ── 日付範囲の設定 ──
-        // 先月の期間を計算し、ToString で文字列に変換してフォームに入力する。
         // "yyyy/MM/dd" は書式文字列: yyyy=年4桁, MM=月2桁, dd=日2桁
-        // 例: 2024年5月1日 → "2024/05/01"（書式はシステムに合わせて変更すること）
         var (startDate, endDate) = GetLastMonthRange();
         await page.FillAsync("#start-date", startDate.ToString("yyyy/MM/dd"));
         await page.FillAsync("#end-date",   endDate.ToString("yyyy/MM/dd"));
         await page.ClickAsync("#search-btn");
-        // WaitForSelectorAsync: 指定した要素が DOM に現れるまで待機する
         await page.WaitForSelectorAsync(".result-table");
 
         // ── ダウンロード ──
         // RunAndWaitForDownloadAsync: クリックとダウンロード完了の待機を同時に行う
-        // Selenium と異なりダウンロード先フォルダの事前設定が不要で、
-        // ダウンロードファイルをプログラムから直接扱える
+        // Selenium と異なりダウンロード先フォルダの事前設定が不要
         var download = await page.RunAndWaitForDownloadAsync(async () =>
         {
             await page.GotoAsync(DownloadUrl);
         });
 
-        // ダウンロードしたファイルを指定フォルダに保存する
         // SuggestedFilename: サーバーが提示したファイル名（Content-Disposition ヘッダから取得）
         var filePath = Path.Combine(saveDirectory, download.SuggestedFilename);
         await download.SaveAsAsync(filePath);
@@ -163,7 +190,6 @@ class BusinessSystemDownloader
 // ─────────────────────────────────────────────────────────────
 static class ExcelParser
 {
-    // ダウンロードした Excel ファイルを SalesRecord のリストに変換する
     public static List<SalesRecord> Parse(string filePath)
     {
         var records = new List<SalesRecord>();
@@ -182,14 +208,13 @@ static class ExcelParser
         for (int row = 2; row <= lastRow; row++)
         {
             // Cell(行番号, 列番号).GetValue<型>() でセルの値を指定した型で取得する
-            var record = new SalesRecord(
+            records.Add(new SalesRecord(
                 OrderDate:   sheet.Cell(row, 1).GetValue<string>(),
                 ProductName: sheet.Cell(row, 2).GetValue<string>(),
                 Category:    sheet.Cell(row, 3).GetValue<string>(),
                 UnitPrice:   sheet.Cell(row, 4).GetValue<decimal>(),
                 Quantity:    sheet.Cell(row, 5).GetValue<int>()
-            );
-            records.Add(record);
+            ));
         }
 
         Console.WriteLine($"{records.Count} 件のデータを読み込みました");
@@ -213,7 +238,6 @@ static class SalesAggregator
         // var totalDict    = new Dictionary<string, decimal>();
         // var quantityDict = new Dictionary<string, int>();
         // var countDict    = new Dictionary<string, int>();
-        //
         // foreach (var r in records)
         // {
         //     if (!totalDict.ContainsKey(r.Category))
@@ -230,15 +254,14 @@ static class SalesAggregator
 
         // ── 【LINQ を使う場合】操作を連鎖させて簡潔に書ける ──
         //
-        // GroupBy:          同じ Category を持つレコードをグループにまとめる
-        //                   例: { "電子機器": [record1, record3], "食品": [record2] }
-        // Select:           各グループを別の型に変換する（ここでは CategorySummary に変換）
-        //                   g.Key = グループのキー（カテゴリ名）
-        // g.Sum(r => ...):  グループ内のレコードの指定プロパティを合計する
-        // g.Count():        グループ内のレコード件数を返す
-        // OrderByDescending: 指定プロパティの降順（大きい順）に並べる
-        // ToList():         ここまでの処理を実行し、結果を List に確定させる
-        var summary = records
+        // GroupBy:           同じ Category を持つレコードをグループにまとめる
+        // Select:            各グループを CategorySummary に変換する
+        //                    g.Key = グループのキー（カテゴリ名）
+        // g.Sum(r => ...):   グループ内の指定プロパティを合計する
+        // g.Count():         グループ内のレコード件数を返す
+        // OrderByDescending: 指定プロパティの降順に並べる
+        // ToList():          ここまでの処理を実行し List に確定させる
+        return records
             .GroupBy(r => r.Category)
             .Select(g => new CategorySummary
             {
@@ -249,8 +272,6 @@ static class SalesAggregator
             })
             .OrderByDescending(s => s.TotalAmount)
             .ToList();
-
-        return summary;
     }
 }
 
@@ -260,11 +281,10 @@ static class SalesAggregator
 static class ExcelWriter
 {
     public static void Write(
-        List<SalesRecord> records,
+        List<SalesRecord>    records,
         List<CategorySummary> summary,
-        string outputPath)
+        string               outputPath)
     {
-        // 新しい Excel ブックを作成する
         using var workbook = new XLWorkbook();
 
         WriteRawDataSheet(workbook, records);
@@ -278,23 +298,11 @@ static class ExcelWriter
     private static void WriteRawDataSheet(XLWorkbook workbook, List<SalesRecord> records)
     {
         var sheet = workbook.Worksheets.Add("生データ");
+        WriteHeader(sheet, new[] { "注文日", "商品名", "カテゴリ", "単価", "数量", "合計金額" }, XLColor.SteelBlue);
 
-        // ヘッダ行を書き込む
-        string[] headers = { "注文日", "商品名", "カテゴリ", "単価", "数量", "合計金額" };
-        for (int col = 1; col <= headers.Length; col++)
-        {
-            var cell = sheet.Cell(1, col);
-            cell.Value = headers[col - 1];
-            cell.Style.Fill.BackgroundColor = XLColor.SteelBlue;
-            cell.Style.Font.FontColor       = XLColor.White;
-            cell.Style.Font.Bold            = true;
-        }
-
-        // データ行を書き込む（2 行目から）
         for (int i = 0; i < records.Count; i++)
         {
-            var r   = records[i];
-            int row = i + 2;
+            var r = records[i]; int row = i + 2;
             sheet.Cell(row, 1).Value = r.OrderDate;
             sheet.Cell(row, 2).Value = r.ProductName;
             sheet.Cell(row, 3).Value = r.Category;
@@ -303,7 +311,6 @@ static class ExcelWriter
             sheet.Cell(row, 6).Value = r.TotalAmount;
         }
 
-        // 列幅をセルの内容に合わせて自動調整する
         sheet.Columns().AdjustToContents();
     }
 
@@ -311,82 +318,38 @@ static class ExcelWriter
     private static void WriteSummarySheet(XLWorkbook workbook, List<CategorySummary> summary)
     {
         var sheet = workbook.Worksheets.Add("カテゴリ集計");
+        WriteHeader(sheet, new[] { "カテゴリ", "合計金額", "合計数量", "注文件数" }, XLColor.DarkGreen);
 
-        // ヘッダ行
-        string[] headers = { "カテゴリ", "合計金額", "合計数量", "注文件数" };
-        for (int col = 1; col <= headers.Length; col++)
-        {
-            var cell = sheet.Cell(1, col);
-            cell.Value = headers[col - 1];
-            cell.Style.Fill.BackgroundColor = XLColor.DarkGreen;
-            cell.Style.Font.FontColor       = XLColor.White;
-            cell.Style.Font.Bold            = true;
-        }
-
-        // データ行
         for (int i = 0; i < summary.Count; i++)
         {
-            var s   = summary[i];
-            int row = i + 2;
+            var s = summary[i]; int row = i + 2;
             sheet.Cell(row, 1).Value = s.Category;
             sheet.Cell(row, 2).Value = s.TotalAmount;
             sheet.Cell(row, 3).Value = s.TotalQuantity;
             sheet.Cell(row, 4).Value = s.OrderCount;
         }
 
-        // 合計行を末尾に追加する
-        // LINQ の Sum でリスト全体の合計を計算する
+        // 合計行を末尾に追加する（LINQ の Sum でリスト全体の合計を計算する）
         int totalRow = summary.Count + 2;
-        var totalLabel = sheet.Cell(totalRow, 1);
-        totalLabel.Value          = "合計";
-        totalLabel.Style.Font.Bold = true;
+        var label = sheet.Cell(totalRow, 1);
+        label.Value = "合計"; label.Style.Font.Bold = true;
         sheet.Cell(totalRow, 2).Value = summary.Sum(s => s.TotalAmount);
         sheet.Cell(totalRow, 3).Value = summary.Sum(s => s.TotalQuantity);
         sheet.Cell(totalRow, 4).Value = summary.Sum(s => s.OrderCount);
 
         sheet.Columns().AdjustToContents();
     }
-}
 
-// ─────────────────────────────────────────────────────────────
-// エントリポイント
-// ─────────────────────────────────────────────────────────────
-class Program
-{
-    // async Task Main = Playwright など非同期処理を使う場合のエントリポイントの書き方
-    // 通常の void Main と異なり、await を使った非同期処理を呼び出せる
-    static async Task Main(string[] args)
+    // ヘッダ行の書き込み（共通処理）
+    private static void WriteHeader(IXLWorksheet sheet, string[] headers, XLColor bgColor)
     {
-        // 実行ファイルと同じフォルダをダウンロード先・出力先にする
-        var workDir    = AppContext.BaseDirectory;
-        var outputPath = Path.Combine(workDir, "集計結果.xlsx");
-
-        Console.WriteLine("=== 業務システムからExcelダウンロードして集計 ===");
-
-        // 1. ブラウザでログインしてダウンロード
-        Console.WriteLine("\n[1/4] ブラウザでログイン・ダウンロード中...");
-        var downloader         = new BusinessSystemDownloader();
-        var downloadedFilePath = await downloader.DownloadAsync(workDir);
-
-        // 2. ダウンロードした Excel を読み込む
-        Console.WriteLine("\n[2/4] Excel を読み込み中...");
-        var records = ExcelParser.Parse(downloadedFilePath);
-
-        // 3. LINQ でカテゴリ別に集計する
-        Console.WriteLine("\n[3/4] 集計中...");
-        var summary = SalesAggregator.Aggregate(records);
-
-        // 集計結果をコンソールにも出力する
-        Console.WriteLine("\nカテゴリ別集計結果:");
-        foreach (var s in summary)
+        for (int col = 1; col <= headers.Length; col++)
         {
-            Console.WriteLine($"  {s.Category,-15} 合計金額: {s.TotalAmount,10:N0}円  件数: {s.OrderCount}");
+            var cell = sheet.Cell(1, col);
+            cell.Value                      = headers[col - 1];
+            cell.Style.Fill.BackgroundColor = bgColor;
+            cell.Style.Font.FontColor       = XLColor.White;
+            cell.Style.Font.Bold            = true;
         }
-
-        // 4. Excel に書き出す
-        Console.WriteLine("\n[4/4] Excel に書き出し中...");
-        ExcelWriter.Write(records, summary, outputPath);
-
-        Console.WriteLine("\n完了しました。");
     }
 }
