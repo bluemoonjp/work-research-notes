@@ -83,16 +83,60 @@ class DepartmentSummary
 }
 
 // ─────────────────────────────────────────────────────────────
+// エントリポイント
+// ─────────────────────────────────────────────────────────────
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        var workDir    = AppContext.BaseDirectory;
+        var outputPath = Path.Combine(workDir, "集計結果.xlsx");
+
+        Console.WriteLine("=== 2データを結合して商品別・部門別に集計 ===");
+
+        // 1. ブラウザでログイン・日付設定・2ファイルダウンロード
+        Console.WriteLine("\n[1/5] ブラウザでログイン・ダウンロード中...");
+        var downloader = new BusinessSystemDownloader();
+        var (masterPath, salesPath) = await downloader.DownloadBothAsync(workDir);
+
+        // 2. 商品マスタを読み込む
+        Console.WriteLine("\n[2/5] 商品マスタを読み込み中...");
+        var masters = MasterExcelParser.Parse(masterPath);
+
+        // 3. 売上データを読み込む
+        Console.WriteLine("\n[3/5] 売上データを読み込み中...");
+        var salesRows = SalesExcelParser.Parse(salesPath);
+
+        // 4. 2 データを Join する
+        Console.WriteLine("\n[4/5] データを結合・集計中...");
+        var joined         = DataJoiner.Join(salesRows, masters);
+        var productSummary = SalesAggregator.ByProduct(joined);
+        var deptSummary    = SalesAggregator.ByDepartment(joined);
+
+        // 集計結果をコンソールに出力する
+        Console.WriteLine("\n── 部門別集計（客単価）──");
+        foreach (var d in deptSummary)
+            Console.WriteLine($"  {d.Department,-12} 売上: {d.TotalAmount,10:N0}円  客数: {d.CustomerCount,5}  客単価: {d.AvgPerCustomer:N0}円");
+
+        // 5. Excel に書き出す
+        Console.WriteLine("\n[5/5] Excel に書き出し中...");
+        ExcelWriter.Write(joined, productSummary, deptSummary, outputPath);
+
+        Console.WriteLine("\n完了しました。");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // ブラウザ操作: Playwright でログイン・日付設定・2ファイルダウンロード
 // ─────────────────────────────────────────────────────────────
 class BusinessSystemDownloader
 {
-    private const string LoginUrl          = "https://example.com/login";
-    private const string DashboardUrl      = "**/dashboard";
-    private const string UserName          = "user@example.com";
-    private const string Password          = "password";
+    private const string LoginUrl     = "https://example.com/login";
+    private const string DashboardUrl = "**/dashboard";
+    private const string UserName     = "user@example.com";
+    private const string Password     = "password";
 
-    // 先月の期間を計算する（1本目サンプルと同じパターン）
+    // 先月の期間を計算する
     //
     // タプル戻り値 (DateTime Start, DateTime End):
     //   複数の値をひとつの戻り値にまとめる C# の機能。
@@ -125,7 +169,6 @@ class BusinessSystemDownloader
 
         // ── 日付範囲の設定 ──
         // ToString("yyyy/MM/dd"): DateTime を "2024/05/01" のような文字列に変換する
-        // 書式指定子の意味: yyyy=4桁年, MM=2桁月, dd=2桁日
         var (startDate, endDate) = GetLastMonthRange();
         await page.FillAsync("#start-date", startDate.ToString("yyyy/MM/dd"));
         await page.FillAsync("#end-date",   endDate.ToString("yyyy/MM/dd"));
@@ -231,12 +274,11 @@ static class DataJoiner
         //             s.Quantity, s.Amount));
         //     }
         // }
-        // Dictionary の生成・null チェック・要素追加と 3 つの操作が分散してしまう
 
         // ── 【LINQ Join を使う場合】結合条件と変換を 1 つにまとめられる ──
         //
         // 引数の読み方:
-        //   第 1 引数 productMasters: 結合する相手のリスト
+        //   第 1 引数 productMasters  : 結合する相手のリスト
         //   第 2 引数 s => s.ProductCode: 売上データ側の結合キー
         //   第 3 引数 p => p.ProductCode: 商品マスタ側の結合キー
         //   第 4 引数 (s, p) => new ...: 結合後に作るオブジェクト
@@ -314,9 +356,7 @@ static class SalesAggregator
                 // 客単価 = 売上合計 ÷ 客数
                 // 客数 = ユニークなレシートID の数（同じレシートの複数商品を 1 客として数える）
                 //
-                // Select で ReceiptId だけを取り出す
-                // Distinct で重複を除去する
-                // Count で件数を数える
+                // Select で ReceiptId だけを取り出す → Distinct で重複除去 → Count で件数
                 var customerCount = g.Select(r => r.ReceiptId).Distinct().Count();
 
                 return new DepartmentSummary
@@ -339,10 +379,10 @@ static class SalesAggregator
 static class ExcelWriter
 {
     public static void Write(
-        List<JoinedSales>      joinedData,
-        List<ProductSummary>   productSummary,
+        List<JoinedSales>       joinedData,
+        List<ProductSummary>    productSummary,
         List<DepartmentSummary> deptSummary,
-        string                 outputPath)
+        string                  outputPath)
     {
         using var workbook = new XLWorkbook();
         WriteJoinedSheet(workbook, joinedData);
@@ -356,8 +396,7 @@ static class ExcelWriter
     private static void WriteJoinedSheet(XLWorkbook workbook, List<JoinedSales> data)
     {
         var sheet = workbook.Worksheets.Add("結合データ");
-        string[] headers = { "レシートID", "売上日", "商品コード", "商品名", "部門カテゴリ", "入り数", "販売個数", "売上金額" };
-        WriteHeader(sheet, headers, XLColor.SteelBlue);
+        WriteHeader(sheet, new[] { "レシートID", "売上日", "商品コード", "商品名", "部門カテゴリ", "入り数", "販売個数", "売上金額" }, XLColor.SteelBlue);
 
         for (int i = 0; i < data.Count; i++)
         {
@@ -378,8 +417,7 @@ static class ExcelWriter
     private static void WriteProductSheet(XLWorkbook workbook, List<ProductSummary> summary)
     {
         var sheet = workbook.Worksheets.Add("商品別集計");
-        string[] headers = { "商品コード", "商品名", "部門カテゴリ", "売上合計", "件数", "販売個数", "ケース数", "端数", "入り数" };
-        WriteHeader(sheet, headers, XLColor.DarkGreen);
+        WriteHeader(sheet, new[] { "商品コード", "商品名", "部門カテゴリ", "売上合計", "件数", "販売個数", "ケース数", "端数", "入り数" }, XLColor.DarkGreen);
 
         for (int i = 0; i < summary.Count; i++)
         {
@@ -410,8 +448,7 @@ static class ExcelWriter
     private static void WriteDeptSheet(XLWorkbook workbook, List<DepartmentSummary> summary)
     {
         var sheet = workbook.Worksheets.Add("部門別集計");
-        string[] headers = { "部門カテゴリ", "売上合計", "客数", "客単価" };
-        WriteHeader(sheet, headers, XLColor.DarkOrange);
+        WriteHeader(sheet, new[] { "部門カテゴリ", "売上合計", "客数", "客単価" }, XLColor.DarkOrange);
 
         for (int i = 0; i < summary.Count; i++)
         {
@@ -438,54 +475,10 @@ static class ExcelWriter
         for (int col = 1; col <= headers.Length; col++)
         {
             var cell = sheet.Cell(1, col);
-            cell.Value = headers[col - 1];
+            cell.Value                      = headers[col - 1];
             cell.Style.Fill.BackgroundColor = bgColor;
             cell.Style.Font.FontColor       = XLColor.White;
             cell.Style.Font.Bold            = true;
         }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// エントリポイント
-// ─────────────────────────────────────────────────────────────
-class Program
-{
-    static async Task Main(string[] args)
-    {
-        var workDir    = AppContext.BaseDirectory;
-        var outputPath = Path.Combine(workDir, "集計結果.xlsx");
-
-        Console.WriteLine("=== 2データを結合して商品別・部門別に集計 ===");
-
-        // 1. ブラウザでログイン・日付設定・2ファイルダウンロード
-        Console.WriteLine("\n[1/5] ブラウザでログイン・ダウンロード中...");
-        var downloader = new BusinessSystemDownloader();
-        var (masterPath, salesPath) = await downloader.DownloadBothAsync(workDir);
-
-        // 2. 商品マスタを読み込む
-        Console.WriteLine("\n[2/5] 商品マスタを読み込み中...");
-        var masters = MasterExcelParser.Parse(masterPath);
-
-        // 3. 売上データを読み込む
-        Console.WriteLine("\n[3/5] 売上データを読み込み中...");
-        var salesRows = SalesExcelParser.Parse(salesPath);
-
-        // 4. 2 データを Join する
-        Console.WriteLine("\n[4/5] データを結合・集計中...");
-        var joined         = DataJoiner.Join(salesRows, masters);
-        var productSummary = SalesAggregator.ByProduct(joined);
-        var deptSummary    = SalesAggregator.ByDepartment(joined);
-
-        // 集計結果をコンソールに出力する
-        Console.WriteLine("\n── 部門別集計（客単価）──");
-        foreach (var d in deptSummary)
-            Console.WriteLine($"  {d.Department,-12} 売上: {d.TotalAmount,10:N0}円  客数: {d.CustomerCount,5}  客単価: {d.AvgPerCustomer:N0}円");
-
-        // 5. Excel に書き出す
-        Console.WriteLine("\n[5/5] Excel に書き出し中...");
-        ExcelWriter.Write(joined, productSummary, deptSummary, outputPath);
-
-        Console.WriteLine("\n完了しました。");
     }
 }
