@@ -34,6 +34,40 @@ record ProductMaster(
 );
 
 // ─────────────────────────────────────────────────────────────
+// エントリポイント
+// ─────────────────────────────────────────────────────────────
+class Program
+{
+    static void Main(string[] args)
+    {
+        // AppContext.BaseDirectory: 実行ファイルと同じディレクトリのパスを取得する
+        var filePath = Path.Combine(AppContext.BaseDirectory, "データ.xlsx");
+
+        Console.WriteLine("=== 単純なWhere条件 ===");
+
+        // XLWorkbook(filePath): 既存の Excel ファイルを開く
+        // using: ブロックを抜けるときに自動で Dispose（ファイルを閉じる）する
+        using var workbook = new XLWorkbook(filePath);
+
+        // 1. 商品マスタを読み込む
+        Console.WriteLine("\n[1/3] 商品マスタを読み込み中...");
+        var masters = MasterSheetReader.Read(workbook);
+
+        // 2. Where で絞り込む
+        Console.WriteLine("\n[2/3] 絞り込み中...");
+        var filtered = Prog1Processor.Filter(masters);
+
+        // 3. 結果を同じブックに書き出す
+        Console.WriteLine("\n[3/3] Excel に書き出し中...");
+        Prog1SheetWriter.Write(workbook, filtered);
+
+        // workbook.Save(): 開いたファイルを上書き保存する（SaveAs と違いパス指定不要）
+        workbook.Save();
+        Console.WriteLine("\n完了しました。");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Excel 読み込み: 商品マスタシート
 // ─────────────────────────────────────────────────────────────
 static class MasterSheetReader
@@ -142,42 +176,7 @@ static class Prog1SheetWriter
             sheet.Cell(row, 8).Value = m.単品売価;
         }
 
-        // 列幅をコンテンツに合わせて自動調整する
         sheet.Columns().AdjustToContents();
         Console.WriteLine($"シート「{SheetName}」に {data.Count} 件書き出し");
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// エントリポイント
-// ─────────────────────────────────────────────────────────────
-class Program
-{
-    static void Main(string[] args)
-    {
-        // AppContext.BaseDirectory: 実行ファイルと同じディレクトリのパスを取得する
-        var filePath = Path.Combine(AppContext.BaseDirectory, "データ.xlsx");
-
-        Console.WriteLine("=== 単純なWhere条件 ===");
-
-        // XLWorkbook(filePath): 既存の Excel ファイルを開く
-        // using: ブロックを抜けるときに自動で Dispose（ファイルを閉じる）する
-        using var workbook = new XLWorkbook(filePath);
-
-        // 1. 商品マスタを読み込む
-        Console.WriteLine("\n[1/3] 商品マスタを読み込み中...");
-        var masters = MasterSheetReader.Read(workbook);
-
-        // 2. Where で絞り込む
-        Console.WriteLine("\n[2/3] 絞り込み中...");
-        var filtered = Prog1Processor.Filter(masters);
-
-        // 3. 結果を同じブックに書き出す
-        Console.WriteLine("\n[3/3] Excel に書き出し中...");
-        Prog1SheetWriter.Write(workbook, filtered);
-
-        // workbook.Save(): 開いたファイルを上書き保存する（SaveAs と違いパス指定不要）
-        workbook.Save();
-        Console.WriteLine("\n完了しました。");
     }
 }
