@@ -73,6 +73,43 @@ class SalesSummary
 }
 
 // ─────────────────────────────────────────────────────────────
+// エントリポイント
+// ─────────────────────────────────────────────────────────────
+class Program
+{
+    static void Main(string[] args)
+    {
+        // AppContext.BaseDirectory: 実行ファイルと同じディレクトリのパスを取得する
+        var filePath = Path.Combine(AppContext.BaseDirectory, "データ.xlsx");
+
+        Console.WriteLine("=== ジョイントグループ化 ===");
+
+        // XLWorkbook(filePath): 既存の Excel ファイルを開く
+        using var workbook = new XLWorkbook(filePath);
+
+        // 1. 商品マスタを読み込む
+        Console.WriteLine("\n[1/4] 商品マスタを読み込み中...");
+        var masters = MasterSheetReader.Read(workbook);
+
+        // 2. 注文を読み込む
+        Console.WriteLine("\n[2/4] 注文を読み込み中...");
+        var orders = OrderSheetReader.Read(workbook);
+
+        // 3. Join してグループ化集計する
+        Console.WriteLine("\n[3/4] Join・集計中...");
+        var summary = Prog2Processor.Run(masters, orders);
+
+        // 4. 結果を同じブックに書き出す
+        Console.WriteLine("\n[4/4] Excel に書き出し中...");
+        Prog2SheetWriter.Write(workbook, summary);
+
+        // workbook.Save(): 開いたファイルを上書き保存する
+        workbook.Save();
+        Console.WriteLine("\n完了しました。");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Excel 読み込み: 商品マスタシート
 // ─────────────────────────────────────────────────────────────
 static class MasterSheetReader
@@ -297,49 +334,11 @@ static class Prog2SheetWriter
 
             // 利益率はセルの値に小数（例: 0.35）を設定し、
             // 書式を "0.00%" にすることで Excel 上で「35.00%」と表示される
-            sheet.Cell(row, 10).Value                        = r.利益率;
-            sheet.Cell(row, 10).Style.NumberFormat.Format    = "0.00%";
+            sheet.Cell(row, 10).Value                     = r.利益率;
+            sheet.Cell(row, 10).Style.NumberFormat.Format = "0.00%";
         }
 
-        // 列幅をコンテンツに合わせて自動調整する
         sheet.Columns().AdjustToContents();
         Console.WriteLine($"シート「{SheetName}」に {data.Count} 件書き出し");
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// エントリポイント
-// ─────────────────────────────────────────────────────────────
-class Program
-{
-    static void Main(string[] args)
-    {
-        // AppContext.BaseDirectory: 実行ファイルと同じディレクトリのパスを取得する
-        var filePath = Path.Combine(AppContext.BaseDirectory, "データ.xlsx");
-
-        Console.WriteLine("=== ジョイントグループ化 ===");
-
-        // XLWorkbook(filePath): 既存の Excel ファイルを開く
-        using var workbook = new XLWorkbook(filePath);
-
-        // 1. 商品マスタを読み込む
-        Console.WriteLine("\n[1/4] 商品マスタを読み込み中...");
-        var masters = MasterSheetReader.Read(workbook);
-
-        // 2. 注文を読み込む
-        Console.WriteLine("\n[2/4] 注文を読み込み中...");
-        var orders = OrderSheetReader.Read(workbook);
-
-        // 3. Join してグループ化集計する
-        Console.WriteLine("\n[3/4] Join・集計中...");
-        var summary = Prog2Processor.Run(masters, orders);
-
-        // 4. 結果を同じブックに書き出す
-        Console.WriteLine("\n[4/4] Excel に書き出し中...");
-        Prog2SheetWriter.Write(workbook, summary);
-
-        // workbook.Save(): 開いたファイルを上書き保存する
-        workbook.Save();
-        Console.WriteLine("\n完了しました。");
     }
 }
