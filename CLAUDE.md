@@ -72,6 +72,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | ファイル名 | 要否 | 内容 |
 |---|---|---|
-| `概要.md` | 各テーマディレクトリに必須 | テーマの目的・方針・コード一覧 |
+| `README.md` | 各テーマディレクトリに必須 | テーマの目的・方針・コード一覧 |
 | `言語別解説.md` | 複数言語が存在する場合 | 各言語ごとのコードの解説 |
 | `<テーマ固有>.md` | 任意 | 比較表・特徴まとめなど |
