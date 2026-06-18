@@ -81,3 +81,8 @@ UI 自動化が本質のボット（例: レガシーシステムの画面を操
 - 業務部門ユーザーが自己管理しているボット
 
 移行の優先順位は「保守コストが高いもの」と「C# にすることで明確にメリットが出るもの」を基準にします。単純なボットをむりに移行しても費用対効果が低く、移行リソースを複雑なものに集中させる方が効果的です。
+
+## 参考資料
+
+- [Windows Forms (WinForms) — Microsoft Learn](https://learn.microsoft.com/ja-jp/dotnet/desktop/winforms/)
+- [HttpClient クラス — Microsoft .NET リファレンス](https://learn.microsoft.com/ja-jp/dotnet/api/system.net.http.httpclient)
