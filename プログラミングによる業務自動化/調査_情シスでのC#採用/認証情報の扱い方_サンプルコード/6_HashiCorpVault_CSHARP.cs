@@ -27,6 +27,15 @@
 //   setx VAULT_ROLE_ID "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 //   setx VAULT_SECRET_ID "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
 //
+// ！設計上の注意 — Bootstrap 問題！
+//   secret_id 自体がシークレットであるため、どこに配布・保管するかが設計の核心になる。
+//   setx による OS への永続保存はシンプルだが、Vault 導入の目的（シークレット集中管理）を
+//   一部損なう。本番では以下の代替を検討すること:
+//     - タスクスケジューラや NSSM のラッパーから実行時にのみプロセス環境変数として注入する
+//       （setx を使わず OS に永続させない）
+//     - Vault Agent Auto-Auth + Response Wrapping で secret_id のライフサイクルを自動化する
+//     - LDAP 認証に切り替えて secret_id 問題を根本的に回避する（下記 LDAP モードを参照）
+//
 // LDAP認証で実行する場合:
 //   setx VAULT_AUTH_METHOD "ldap"
 //   setx VAULT_LDAP_USERNAME "domain-user-or-service-account"
@@ -62,7 +71,7 @@ try
         mountPoint: kvMountPoint
     );
 
-    if (!secret.Data.TryGetValue(secretKey, out var secretValue) || secretValue is null)
+    if (!secret.Data.Data.TryGetValue(secretKey, out var secretValue) || secretValue is null)
         throw new InvalidOperationException($"Vault の KV v2 パス [{kvMountPoint}/{secretPath}] にキー [{secretKey}] がありません。");
 
     var secretText = Convert.ToString(secretValue) ?? string.Empty;

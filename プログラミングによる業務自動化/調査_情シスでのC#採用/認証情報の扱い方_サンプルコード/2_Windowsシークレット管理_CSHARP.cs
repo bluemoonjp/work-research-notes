@@ -93,7 +93,6 @@ static class WindowsCredentialManager
             var cred = Marshal.PtrToStructure<CREDENTIAL>(credPtr);
             var password = cred.CredentialBlobSize > 0
                 ? Encoding.Unicode.GetString(
-                    Marshal.PtrToStructure<byte[]>(cred.CredentialBlob) ??
                     ReadBytes(cred.CredentialBlob, (int)cred.CredentialBlobSize))
                 : string.Empty;
 
