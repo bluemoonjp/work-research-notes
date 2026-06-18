@@ -25,6 +25,8 @@
 // セットアップ後に必ず実施するACL設定（管理者コマンドプロンプト）:
 //   icacls "C:\ProgramData\MyCompanyApp\credentials.dat" /inheritance:r
 //     /grant "NT AUTHORITY\SYSTEM:(R)" /grant "BUILTIN\Administrators:(R)"
+//   専用サービスアカウントで実行する場合はそのアカウントの読み取り権限も追加する:
+//     icacls "C:\ProgramData\MyCompanyApp\credentials.dat" /grant "DOMAIN\svc-myapp:(R)"
 //
 // 制限: Windows 専用（ProtectedData は Windows のみ対応）
 //
@@ -50,7 +52,7 @@ static class ServerCredentialStore
         "credentials.dat"
     );
 
-    // アプリ固有のエントロピー（他アプリからの復号を防ぐ追加の塩）
+    // アプリ固有のエントロピー（アプリを区別するための補助値。秘密鍵ではない。保護の主体は DPAPI と ACL）
     static readonly byte[] Entropy = { 0x53, 0x72, 0x76, 0x4B, 0x65, 0x79, 0x30, 0x31 };
 
     public static bool Exists() => File.Exists(FilePath);
@@ -73,6 +75,8 @@ static class ServerCredentialStore
         Console.WriteLine();
         Console.WriteLine("次のコマンドでファイルのアクセス権を制限してください（管理者コマンドプロンプト）:");
         Console.WriteLine($@"  icacls ""{FilePath}"" /inheritance:r /grant ""NT AUTHORITY\SYSTEM:(R)"" /grant ""BUILTIN\Administrators:(R)""");
+        Console.WriteLine("専用サービスアカウントで実行する場合は、そのアカウントの読み取り権限も追加してください:");
+        Console.WriteLine($@"  icacls ""{FilePath}"" /grant ""DOMAIN\\サービスアカウント名:(R)""");
     }
 
     /// <summary>

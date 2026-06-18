@@ -11,7 +11,7 @@
 // 推奨する環境変数の注入方法（優先度順）:
 //   1. CI/CD のシークレット機能（GitHub Actions Secrets、Azure Pipeline 変数等）
 //      実行ごとにプロセス環境に注入される。OS の環境変数に永続しない
-//   2. タスクスケジューラのタスクプロパティ「環境変数」（バッチ実行向け）
+//   2. タスクスケジューラからラッパースクリプト（.cmd/.ps1）を起動してプロセス環境に注入する（バッチ実行向け）
 //   3. サービスマネージャー（sc.exe や NSSM）の環境変数設定
 //   4. OS の Machine 環境変数（最終手段。平文でレジストリに保存される）
 //
@@ -55,7 +55,8 @@ static class AppConfig
                 Console.Error.WriteLine($"  {name}");
 
             Console.Error.WriteLine();
-            Console.Error.WriteLine("Windows Server での設定方法（管理者 PowerShell）:");
+            Console.Error.WriteLine("推奨: タスクスケジューラや NSSM のラッパースクリプトから実行時にプロセス環境変数として注入してください（OS に永続しない）。");
+            Console.Error.WriteLine("最終手段 — Machine 環境変数への保存（管理者 PowerShell）:");
             Console.Error.WriteLine($"  [System.Environment]::SetEnvironmentVariable(\"{EnvUserId}\", \"値\", \"Machine\")");
             Console.Error.WriteLine($"  [System.Environment]::SetEnvironmentVariable(\"{EnvApiToken}\", \"値\", \"Machine\")");
             Console.Error.WriteLine("設定後はサービスまたはタスクスケジューラを再起動してください。");

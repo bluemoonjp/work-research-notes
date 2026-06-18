@@ -39,7 +39,7 @@ static class CredentialStore
         "credentials.dat"
     );
 
-    // アプリ固有のエントロピー（他アプリからの復号を防ぐ追加の塩）
+    // アプリ固有のエントロピー（アプリを区別するための補助値。秘密鍵ではない。保護の主体は DataProtectionScope.CurrentUser）
     static readonly byte[] Entropy = { 0x4D, 0x79, 0x41, 0x70, 0x70, 0x4B, 0x65, 0x79 };
 
     public static bool Exists() => File.Exists(FilePath);
