@@ -64,7 +64,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 <連番>_<説明>_<言語識別子>.<拡張子>
 ```
 
-- 連番は 1 始まりの整数（ゼロ埋め不要）
+- 連番は 1 始まりの 2 桁整数（ゼロ埋めあり、例: `01`, `02`, `10`）
 - 言語識別子: `CSHARP`（.cs）、`VBA`（.bas）
 - 比較ディレクトリ内では同じ連番を複数言語で共有する（対になる）
 
